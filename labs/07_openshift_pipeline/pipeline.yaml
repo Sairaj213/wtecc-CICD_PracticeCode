@@ -1,0 +1,83 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: ci-cd-pipeline
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: build-image
+      description: The container image to build and push
+      default: "image-registry.openshift-image-registry.svc:5000/sn-labs-user/tekton-lab:latest"
+    - name: app-name
+      description: The name of the deployment
+      default: "cicd-app"
+  tasks:
+    - name: cleanup
+      workspaces:
+        - name: source
+          workspace: output
+      taskRef:
+        name: cleanup
+
+    - name: clone
+      runAfter:
+        - cleanup
+      workspaces:
+        - name: output
+          workspace: output
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      params:
+        - name: url
+          value: "https://github.com/ibm-developer-skills-network/wtecc-CICD_PracticeCode"
+
+    - name: flake8
+      runAfter:
+        - clone
+      workspaces:
+        - name: source
+          workspace: output
+      taskRef:
+        name: flake8
+      params:
+        - name: image
+          value: "python:3.9-slim"
+        - name: args
+          value:
+            - "--count"
+            - "--max-complexity=10"
+            - "--max-line-length=127"
+
+    - name: nose
+      runAfter:
+        - flake8
+      workspaces:
+        - name: source
+          workspace: output
+      taskRef:
+        name: nose
+
+    - name: build
+      runAfter:
+        - nose
+      workspaces:
+        - name: source
+          workspace: output
+      taskRef:
+        name: buildah
+        kind: ClusterTask
+      params:
+        - name: IMAGE
+          value: $(params.build-image)
+
+    - name: deploy
+      runAfter:
+        - build
+      taskRef:
+        name: openshift-client
+        kind: ClusterTask
+      params:
+        - name: SCRIPT
+          value: "oc create deployment $(params.app-name) --image=$(params.build-image) --dry-run=client -o yaml | oc apply -f -"
