@@ -1,11 +1,12 @@
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
-metadata:  
+metadata:
   name: cd-pipeline
 spec:
   workspaces:
     - name: pipeline-workspace
   params:
+    - name: build-image
     - name: repo-url
     - name: branch
       default: master
@@ -13,14 +14,14 @@ spec:
     - name: init
       workspaces:
         - name: source
-          workspace: pipeline-workspace          
+          workspace: pipeline-workspace
       taskRef:
         name: cleanup
 
     - name: clone
       workspaces:
         - name: output
-          workspace: pipeline-workspace          
+          workspace: pipeline-workspace
       taskRef:
         name: git-clone
       params:
@@ -29,12 +30,12 @@ spec:
       - name: revision
         value: $(params.branch)
       runAfter:
-        - init      
+        - init
 
     - name: lint
       workspaces:
         - name: source
-          workspace: pipeline-workspace          
+          workspace: pipeline-workspace
       taskRef:
         name: flake8
       params:
@@ -48,7 +49,7 @@ spec:
     - name: tests
       workspaces:
         - name: source
-          workspace: pipeline-workspace          
+          workspace: pipeline-workspace
       taskRef:
         name: nose
       params:
@@ -58,11 +59,15 @@ spec:
         - lint
 
     - name: build
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
       taskRef:
-        name: echo
+        name: buildah
+        kind: ClusterTask
       params:
-      - name: message
-        value: "Building image for $(params.repo-url) ..."
+      - name: IMAGE
+        value: "$(params.build-image)"
       runAfter:
         - tests
 
